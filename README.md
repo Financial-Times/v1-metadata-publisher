@@ -8,22 +8,55 @@ This service gets all the content UUIDs from document-store-api, saves them into
 Usage
 ---------
 
-`go get github.com/Financial-Times/v1-metadata-publisher`
+```
+    go get github.com/Financial-Times/v1-metadata-publisher`
 
-`./v1-metadata-publisher`
+    cd $GOPATH/src/github.com/Financial-Times/v1-metadata-publisher
+
+    go build
+
+    ./v1-metadata-publisher
+```
 
 __With Docker:__
+```bash
+docker pull coco/v1-metadata-publisher:latest
 
-`docker pull coco/v1-metadata-publisher`
+##Set environment variables:
 
-`docker run -ti 
-    --env DELIVERY_CLUSTER=<delivery_cluster_doc_store> 
-    --env DELIVERY_CLUSTER_CREDENTIALS=<username:password> 
-    --env PUBLISHING_CLUSTER=<publishing_cluster_cms_metadata_publisher>  
-    --env PUBLISHING_CLUSTER_CREDENTIALS=<username:password>  
-    --env CMR_ADDRESS=<binding_service_address> 
-    --env CMR_CREDENTIALS=<username:address> 
-    --env SOURCE=<content_source> 
-    --env BATCH_SIZE=<batch_size>  
-    coco/v1-metadata-publisher`
+## Ger URL for content UUIDs
+export DELIVERY_CLUSTER=
+
+## Delivery cluster credentials as username:password
+export DELIVERY_CLUSTER_CREDENTIALS=
+
+## Metadata publishing URL
+export PUBLISHING_CLUSTER=
+
+## Publishing cluster credentials as username:password
+export PUBLISHING_CLUSTER_CREDENTIALS=
+
+## URL of binding-service (this must contain placeholder for {source} and {uuid})
+export CMR_ADDRESS=
+
+## Binding service credentials as username:password
+export CMR_CREDENTIALS=
+
+## the source of content to be published (valid values: METHODE or BLOGS)
+export SOURCE=
+
+## number of requests to be sent / second
+export BATCH_SIZE=
+
+docker run -ti \
+    --env DELIVERY_CLUSTER=$DELIVERY_CLUSTER \
+    --env DELIVERY_CLUSTER_CREDENTIALS=$DELIVERY_CLUSTER_CREDENTIALS \ 
+    --env PUBLISHING_CLUSTER=$PUBLISHING_CLUSTER \ 
+    --env PUBLISHING_CLUSTER_CREDENTIALS=$PUBLISHING_CLUSTER_CREDENTIALS \ 
+    --env CMR_ADDRESS=$CMR_ADDRESS \
+    --env CMR_CREDENTIALS=$CMR_CREDENTIALS \ 
+    --env SOURCE=$SOURCE \
+    --env BATCH_SIZE=$BATCH_SIZE  \
+    coco/v1-metadata-publisher:latest
+```
 
