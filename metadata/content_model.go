@@ -1,8 +1,6 @@
 package metadata
 
-import (
-	"fmt"
-)
+import 	"fmt"
 
 type Content struct {
 	UUID        string       `json:"uuid"`
