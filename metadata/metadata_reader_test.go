@@ -85,7 +85,7 @@ func TestReadByUUIDUnsuccessfull(t *testing.T) {
 }
 
 func TestBuildURL(t *testing.T) {
-	expectedURL := "http://localhost:8080/metadata-services/binding/1.0/sources/METHODE/references/0cd42702-f789-11e6-9516-2d969e0d3b6"
+	expectedURL := "http://localhost:8080/metadata-services/binding/1.0/sources/METHODE/references/0cd42702-f789-11e6-9516-2d969e0d3b65"
 	cmr := V1MetadataReadService{
 		url: "http://localhost:8080" + BindingServiceURL,
 	}

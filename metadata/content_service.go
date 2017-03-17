@@ -30,11 +30,11 @@ func (c *UPPContentService) SaveContent(file string) (*os.File, int, error) {
 
 	reader, err := c.readContent()
 	if err != nil {
-		return nil, 0, err
+		return f, 0, err
 	}
 	total, err := c.writeContent(f, reader)
 	if err != nil {
-		return nil, 0, err
+		return f, 0, err
 	}
 
 	f.Seek(0, 0)

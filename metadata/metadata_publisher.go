@@ -43,8 +43,11 @@ func (mp *V1MetadataPublishService) Publish() error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
-	defer os.Remove(UUIDFile)
+	defer func () {
+		//remove temporary file 
+		f.Close()
+		os.Remove(UUIDFile)
+	}()
 
 	errorsCh := make(chan error)
 	doneCh := make(chan bool)
@@ -97,6 +100,7 @@ func (mp *V1MetadataPublishService) sendMetadataJob(contents []Content, errorsCh
 			metadata, err := mp.mr.ReadByUUID(content)
 			if err != nil {
 				errorsCh <- err
+				return
 			}
 			if len(metadata) == 0 {
 				log.Infof("No metadata found for content with UUID=[%s]", content.UUID)
@@ -105,6 +109,7 @@ func (mp *V1MetadataPublishService) sendMetadataJob(contents []Content, errorsCh
 			err = mp.publishMetadataForUUID(content.UUID, metadata)
 			if err != nil {
 				errorsCh <- err
+				return 
 			}
 		}(content)
 	}

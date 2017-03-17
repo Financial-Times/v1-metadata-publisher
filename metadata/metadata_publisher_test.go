@@ -30,7 +30,7 @@ type MockContentService struct {
 }
 
 func (cs *MockContentService) SaveContent(file string) (*os.File, int, error) {
-	return cs.SaveContent(file)
+	return cs.mockSaveContent(file)
 
 }
 
@@ -77,9 +77,11 @@ func TestPublishMetadataForUUIDUnsuccesfully(t *testing.T) {
 }
 
 func TestSendMetadataJobSuccessfully(t *testing.T) {
+	publishesDone := 0
 	ps := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "binding-service", r.Header.Get("X-Origin-System-Id"), "Invalid X-Origin-System-Id header value")
 		assert.Equal(t, "application/json", r.Header.Get("Content-Type"), "Invalid Content-Type header value")
+		publishesDone++
 		w.Header().Add("X-Request-Id", "tid_testtid")
 	}))
 	defer ps.Close()
@@ -107,13 +109,16 @@ func TestSendMetadataJobSuccessfully(t *testing.T) {
 	}
 
 	go mps.sendMetadataJob(contents, errorsCh, doneCh)
+	go func(errorCh chan error) {
+		for err := range errorsCh {
+			assert.NoError(t, err, "Error occured while publising metadata")
+		}
+	}(errorsCh)
 	<-doneCh
-	for e := range errorsCh {
-		assert.NoError(t, e, "Error while publishing metadata")
-	}
+	assert.Equal(t, 1, publishesDone, "Actual number of publisher requested is different from expected value")
 }
 
-func TestSendMetadataJobNotAvailableMetadataService(t *testing.T) {
+func TestSendMetadataJobMetadataServiceNotAvailable(t *testing.T) {
 	ps := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "binding-service", r.Header.Get("X-Origin-System-Id"), "Invalid X-Origin-System-Id header value")
 		assert.Equal(t, "application/json", r.Header.Get("Content-Type"), "Invalid Content-Type header value")
@@ -144,15 +149,17 @@ func TestSendMetadataJobNotAvailableMetadataService(t *testing.T) {
 	}
 
 	go mps.sendMetadataJob(contents, errorsCh, doneCh)
+	go func(errorCh chan error) {
+		for err := range errorsCh {
+			assert.Error(t, err, "Expecting error occured while publising metadata")
+		}
+	}(errorsCh)
 	<-doneCh
-	for e := range errorsCh {
-		assert.Error(t, e, "Error while publishing metadata")
-	}
 }
 
 func TestSendMetadataJobPublishingClusterNotAvailable(t *testing.T) {
 	ps := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusNotFound)
+		w.WriteHeader(http.StatusInternalServerError)
 	}))
 	defer ps.Close()
 
@@ -179,10 +186,12 @@ func TestSendMetadataJobPublishingClusterNotAvailable(t *testing.T) {
 	}
 
 	go mps.sendMetadataJob(contents, errorsCh, doneCh)
+	go func(errorCh chan error) {
+		for err := range errorsCh {
+			assert.Error(t, err, "Expecting error occured while publising metadata")
+		}
+	}(errorsCh)
 	<-doneCh
-	for e := range errorsCh {
-		assert.Error(t, e, "Error while publishing metadata")
-	}
 }
 
 func TestPublishSuccesfull(t *testing.T) {
@@ -209,7 +218,9 @@ func TestPublishSuccesfull(t *testing.T) {
 		},
 		mr: &MockMetadataReadService{
 			mockReadByUUID: func(content Content) ([]byte, error) {
-				return getMetadata()
+				metadata, err := getMetadata()
+				assert.NoError(t, err, "Error occured while getting metadata")
+				return metadata, nil
 			},
 		},
 		batchSize: 10,
@@ -218,4 +229,26 @@ func TestPublishSuccesfull(t *testing.T) {
 
 	err := mps.Publish()
 	assert.NoError(t, err, "Error while trying to publish metadata")
+}
+
+func TestPublishUnsuccesfullDeliveryClusterNotAvailble(t *testing.T) {
+	ps := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "binding-service", r.Header.Get("X-Origin-System-Id"), "Invalid X-Origin-System-Id header value")
+		assert.Equal(t, "application/json", r.Header.Get("Content-Type"), "Invalid Content-Type header value")
+		w.Header().Add("X-Request-Id", "tid_testtid")
+	}))
+	defer ps.Close()
+
+	mps := V1MetadataPublishService{
+		cs: &MockContentService{
+			mockSaveContent: func(file string) (*os.File, int, error) {
+				return nil, 0, fmt.Errorf("Delivery cluster not available")
+			},
+		},
+		batchSize: 10,
+		source:    "METHODE",
+	}
+
+	err := mps.Publish()
+	assert.Error(t, err, "Expecting error while trying to publish metadata")
 }

@@ -29,10 +29,12 @@ func TestSaveUUIDsSuccesfully(t *testing.T) {
 
 	f, total, err := cs.SaveContent(TestFile)
 	assert.NoError(t, err, "Failed to save content UUIDs")
-	assert.NoError(t, f.Close(), "Error in closing test file")
 	assert.Equal(t, 1, total, "Actual number of items if different from actual number of items")
-	defer os.Remove(TestFile)
-
+	defer func () {
+		assert.NoError(t, f.Close(), "Error while trying to close test file")
+		assert.NoError(t, os.Remove(TestFile), "Error while trying to remove test file")
+	}()
+	
 	result, err := ioutil.ReadFile(TestFile)
 	assert.NoError(t, err, "Failed to save content UUIDs")
 	assert.Equal(t, UUIDResponse, result, "Expected UUIDs are different from actual UUIDs")
@@ -53,8 +55,10 @@ func TestSaveUUIDsGettingUUIDsFails(t *testing.T) {
 	}
 
 	f, _, err := cs.SaveContent(TestFile)
-	defer f.Close()
-	defer os.Remove(TestFile)
+	defer func () {
+		assert.NoError(t, f.Close(), "Error while trying to close test file")
+		assert.NoError(t, os.Remove(TestFile), "Error while trying to remove test file")
+	}()
 
 	assert.Error(t, err, "Expecting error while trying to get the UUIDs")
 }
