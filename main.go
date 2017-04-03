@@ -4,8 +4,16 @@ import (
 	"os"
 
 	"github.com/Financial-Times/v1-metadata-publisher/metadata"
-	log "github.com/Sirupsen/logrus"
+	"github.com/op/go-logging"
 	"github.com/jawher/mow.cli"
+	"github.com/gorilla/mux"
+	"net/http"
+	"strconv"
+)
+
+var log = logging.MustGetLogger("v1-metadata-publisher.log")
+var format = logging.MustStringFormatter(
+	`%{color}%{time:15:04:05.000} %{shortfunc}: %{level:.4s} %{message}`,
 )
 
 func main() {
@@ -16,12 +24,6 @@ func main() {
 		Value:  "http://localhost:8080",
 		Desc:   "Address of the delivery cluster",
 		EnvVar: "DELIVERY_CLUSTER",
-	})
-
-	deliveryClusterCredentials := app.String(cli.StringOpt{
-		Name:   "deliveryClusterCredentials",
-		Desc:   "Credentials of the delivery cluster",
-		EnvVar: "DELIVERY_CLUSTER_CREDENTIALS",
 	})
 
 	publishingCluster := app.String(cli.StringOpt{
@@ -64,8 +66,10 @@ func main() {
 		EnvVar: "BATCH_SIZE",
 	})
 
+	initLogging()
+
 	app.Action = func() {
-		delivery := metadata.GetCluster(*deliveryCluster, *deliveryClusterCredentials)
+		delivery := metadata.GetCluster(*deliveryCluster, "")
 		publishing := metadata.GetCluster(*publishingCluster, *publishingClusterCredentials)
 		cmr := metadata.GetCluster(*cmrAddress, *cmrCredentials)
 
@@ -74,14 +78,54 @@ func main() {
 			log.Errorf("Cannot start application: %s", err)
 			return
 		}
-		
-		contentService := metadata.InitContentService(delivery)
+
+		contentService, err := metadata.InitContentService(delivery)
+		if err != nil {
+			log.Errorf("Cannot start application: %s", err)
+			return
+		}
 		mp := metadata.NewV1MetadataPublishService(contentService, publishing, cmrReader, *source, *batchSize)
 		mp.Publish()
+
+		httpHandler := metadata.NewHttpHandler(mp)
+		listen(httpHandler, 8080)
 	}
 
 	err := app.Run(os.Args)
 	if err != nil {
 		log.Errorf("Cannot start application: %s", err)
+	}
+}
+
+func initLogging() {
+	errorLog, err := os.OpenFile("v1-metadata-publisher-error.log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	if err != nil {
+		panic(err)
+	}
+
+	infoLog, err := os.OpenFile("v1-metadata-publisher.log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	if err != nil {
+		panic(err)
+	}
+
+	fileBackend := logging.NewLogBackend(errorLog, "", 0)
+	stdBackend := logging.NewLogBackend(infoLog, "", 0)
+
+	fileBackendFormatter := logging.NewBackendFormatter(fileBackend, format)
+	stdBackendFormatter := logging.NewBackendFormatter(stdBackend, format)
+
+	fileBackendLeveled := logging.AddModuleLevel(fileBackendFormatter)
+	fileBackendLeveled.SetLevel(logging.ERROR, "")
+
+	logging.SetBackend(fileBackendLeveled, stdBackendFormatter)
+}
+
+func listen(h *metadata.HttpHandler, port int) {
+	r := mux.NewRouter()
+	r.HandleFunc("/metadata/publish", h.Publish).Methods("POST")
+
+	err := http.ListenAndServe(":"+strconv.Itoa(port), r)
+	if err != nil {
+		log.Error(err)
 	}
 }

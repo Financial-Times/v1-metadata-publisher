@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestGetSourceSuccesfullyForSingleSourceContent(t *testing.T) {
+func TestGetSourceSuccessfullyForSingleSourceContent(t *testing.T) {
 	testContent := Content{
 		UUID: "7560aca3-986c-487b-8f9f-6b865872096f",
 		Identifiers: []Identifier{
@@ -16,12 +16,12 @@ func TestGetSourceSuccesfullyForSingleSourceContent(t *testing.T) {
 		},
 	}
 
-	actual, err := testContent.getSource()
-	assert.NoError(t, err, "Error while getting content source")
+	actual, ok := testContent.getSource()
+	assert.True(t, ok, "Error while getting content source")
 	assert.Equal(t, "METHODE", actual, "Actual source is different from expected source")
 }
 
-func TestGetSourceSuccesfullyForMultipleSourcesContent(t *testing.T) {
+func TestGetSourceSuccessfullyForMultipleSourcesContent(t *testing.T) {
 	testContent := Content{
 		UUID: "9cc74217-7690-35be-a0d6-683d118561d4",
 		Identifiers: []Identifier{
@@ -34,12 +34,12 @@ func TestGetSourceSuccesfullyForMultipleSourcesContent(t *testing.T) {
 		},
 	}
 
-	actual, err := testContent.getSource()
-	assert.NoError(t, err, "Error while getting content source")
+	actual, ok := testContent.getSource()
+	assert.True(t, ok, "Error while getting content source")
 	assert.Equal(t, "BLOGS", actual, "Actual source is different from expected source")
 }
 
-func TestGetSourceSuccesfullyForMultipleDifferentSourcesContent(t *testing.T) {
+func TestGetSourceSuccessfullyForMultipleDifferentSourcesContent(t *testing.T) {
 	testContent := Content{
 		UUID: "9cc74217-7690-35be-a0d6-683d118561d4",
 		Identifiers: []Identifier{
@@ -52,6 +52,6 @@ func TestGetSourceSuccesfullyForMultipleDifferentSourcesContent(t *testing.T) {
 		},
 	}
 
-	_, err := testContent.getSource()
-	assert.Error(t, err, "Expecting error but no error was found")
+	_, ok := testContent.getSource()
+	assert.False(t, ok, "Expecting error but no error was found")
 }

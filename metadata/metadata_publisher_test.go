@@ -6,16 +6,9 @@ import (
 	"testing"
 
 	"fmt"
-	"os"
-
-	"io/ioutil"
-
 	"github.com/stretchr/testify/assert"
+	"github.com/pkg/errors"
 )
-
-const UUID = "0cd42702-f789-11e6-9516-2d969e0d3b65"
-
-var UUIDResponse = []byte("{ \"uuid\" : \"0cd42702-f789-11e6-9516-2d969e0d3b65\", \"identifiers\" : [{ \"authority\" : \"http://api.ft.com/system/FTCOM-METHODE\" }] } \n")
 
 type MockMetadataReadService struct {
 	mockReadByUUID func(content Content) ([]byte, error)
@@ -26,15 +19,15 @@ func (mr *MockMetadataReadService) ReadByUUID(content Content) ([]byte, error) {
 }
 
 type MockContentService struct {
-	mockSaveContent func(file string) (*os.File, int, error)
+	mockGetContent func(source string, errCh chan error) chan Content
 }
 
-func (cs *MockContentService) SaveContent(file string) (*os.File, int, error) {
-	return cs.mockSaveContent(file)
+func (cs *MockContentService) GetContent(source string, errCh chan error) chan Content {
+	return cs.mockGetContent(source, errCh)
 
 }
 
-func TestPublishMetadataForUUIDSuccesfully(t *testing.T) {
+func TestPublishMetadataForUUIDSuccessfully(t *testing.T) {
 	ps := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "binding-service", r.Header.Get("X-Origin-System-Id"), "Invalid X-Origin-System-Id header value")
 		assert.Equal(t, "application/json", r.Header.Get("Content-Type"), "Invalid Content-Type header value")
@@ -48,11 +41,12 @@ func TestPublishMetadataForUUIDSuccesfully(t *testing.T) {
 			username: "foo",
 			password: "bar",
 		},
+		client: http.DefaultClient,
 	}
 
-	metadata, err := getMetadata()
+	cm, err := getMetadata()
 	assert.NoError(t, err, "Failed to read metadata")
-	err = mps.publishMetadataForUUID("0cd42702-f789-11e6-9516-2d969e0d3b65", metadata)
+	err = mps.publishMetadataForUUID(testContent, cm)
 	assert.NoError(t, err, "Failed to publish metadata")
 }
 
@@ -68,11 +62,12 @@ func TestPublishMetadataForUUIDUnsuccesfully(t *testing.T) {
 			username: "foo",
 			password: "bar",
 		},
+		client: http.DefaultClient,
 	}
 
-	metadata, err := getMetadata()
+	mc, err := getMetadata()
 	assert.NoError(t, err, "Failed to read metadata")
-	err = mps.publishMetadataForUUID("0cd42702-f789-11e6-9516-2d969e0d3b65", metadata)
+	err = mps.publishMetadataForUUID(testContent, mc)
 	assert.Error(t, err, "Expected metadata publish will return an error")
 }
 
@@ -97,6 +92,7 @@ func TestSendMetadataJobSuccessfully(t *testing.T) {
 				return getMetadata()
 			},
 		},
+		client: http.DefaultClient,
 	}
 
 	errorsCh := make(chan error)
@@ -108,7 +104,7 @@ func TestSendMetadataJobSuccessfully(t *testing.T) {
 		},
 	}
 
-	go mps.sendMetadataJob(contents, errorsCh, doneCh)
+	go mps.SendMetadataJob(contents, errorsCh, doneCh)
 	go func(errorCh chan error) {
 		for err := range errorsCh {
 			assert.NoError(t, err, "Error occured while publising metadata")
@@ -137,6 +133,7 @@ func TestSendMetadataJobMetadataServiceNotAvailable(t *testing.T) {
 				return nil, fmt.Errorf("Cannot get metadata")
 			},
 		},
+		client: http.DefaultClient,
 	}
 
 	errorsCh := make(chan error)
@@ -148,7 +145,7 @@ func TestSendMetadataJobMetadataServiceNotAvailable(t *testing.T) {
 		},
 	}
 
-	go mps.sendMetadataJob(contents, errorsCh, doneCh)
+	go mps.SendMetadataJob(contents, errorsCh, doneCh)
 	go func(errorCh chan error) {
 		for err := range errorsCh {
 			assert.Error(t, err, "Expecting error occured while publising metadata")
@@ -174,6 +171,7 @@ func TestSendMetadataJobPublishingClusterNotAvailable(t *testing.T) {
 				return nil, fmt.Errorf("Cannot get metadata")
 			},
 		},
+		client: http.DefaultClient,
 	}
 
 	errorsCh := make(chan error)
@@ -185,7 +183,7 @@ func TestSendMetadataJobPublishingClusterNotAvailable(t *testing.T) {
 		},
 	}
 
-	go mps.sendMetadataJob(contents, errorsCh, doneCh)
+	go mps.SendMetadataJob(contents, errorsCh, doneCh)
 	go func(errorCh chan error) {
 		for err := range errorsCh {
 			assert.Error(t, err, "Expecting error occured while publising metadata")
@@ -194,7 +192,7 @@ func TestSendMetadataJobPublishingClusterNotAvailable(t *testing.T) {
 	<-doneCh
 }
 
-func TestPublishSuccesfull(t *testing.T) {
+func TestPublishSuccessful(t *testing.T) {
 	ps := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "binding-service", r.Header.Get("X-Origin-System-Id"), "Invalid X-Origin-System-Id header value")
 		assert.Equal(t, "application/json", r.Header.Get("Content-Type"), "Invalid Content-Type header value")
@@ -204,11 +202,13 @@ func TestPublishSuccesfull(t *testing.T) {
 
 	mps := V1MetadataPublishService{
 		cs: &MockContentService{
-			mockSaveContent: func(file string) (*os.File, int, error) {
-				err := ioutil.WriteFile(file, UUIDResponse, 065)
-				assert.NoError(t, err, "")
-				f, err := os.Open(file)
-				return f, 2, err
+			mockGetContent: func(source string, errCh chan error) chan Content {
+				contentCh := make(chan Content)
+				go func() {
+					defer close(contentCh)
+					contentCh <- testContent
+				}()
+				return contentCh
 			},
 		},
 		publishing: &Cluster{
@@ -218,20 +218,21 @@ func TestPublishSuccesfull(t *testing.T) {
 		},
 		mr: &MockMetadataReadService{
 			mockReadByUUID: func(content Content) ([]byte, error) {
-				metadata, err := getMetadata()
+				m, err := getMetadata()
 				assert.NoError(t, err, "Error occured while getting metadata")
-				return metadata, nil
+				return m, nil
 			},
 		},
 		batchSize: 10,
 		source:    "METHODE",
+		client:    http.DefaultClient,
 	}
 
 	err := mps.Publish()
 	assert.NoError(t, err, "Error while trying to publish metadata")
 }
 
-func TestPublishUnsuccesfullDeliveryClusterNotAvailble(t *testing.T) {
+func TestPublishUnsuccessfulDeliveryClusterNotAvailble(t *testing.T) {
 	ps := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "binding-service", r.Header.Get("X-Origin-System-Id"), "Invalid X-Origin-System-Id header value")
 		assert.Equal(t, "application/json", r.Header.Get("Content-Type"), "Invalid Content-Type header value")
@@ -241,12 +242,16 @@ func TestPublishUnsuccesfullDeliveryClusterNotAvailble(t *testing.T) {
 
 	mps := V1MetadataPublishService{
 		cs: &MockContentService{
-			mockSaveContent: func(file string) (*os.File, int, error) {
-				return nil, 0, fmt.Errorf("Delivery cluster not available")
+			mockGetContent: func(source string, errCh chan error) chan Content {
+				go func() {
+					errCh <- errors.New("Error getting content")
+				}()
+				return nil
 			},
 		},
 		batchSize: 10,
 		source:    "METHODE",
+		client:    http.DefaultClient,
 	}
 
 	err := mps.Publish()

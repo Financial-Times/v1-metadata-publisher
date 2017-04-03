@@ -6,67 +6,81 @@ import (
 	"net/http"
 	"strings"
 
-	log "github.com/Sirupsen/logrus"
 	"github.com/bobziuchkovski/digest"
+	"github.com/pkg/errors"
+	"encoding/json"
 )
 
-const SourcePlaceholder = "{source}"
-const UUIDPlaceholder = "{uuid}"
+const (
+	SourcePlaceholder = "{source}"
+	UUIDPlaceholder   = "{uuid}"
+)
 
-type MetadataReadService interface {
+type ReadService interface {
 	ReadByUUID(content Content) ([]byte, error)
 }
 
 type V1MetadataReadService struct {
-	transport *digest.Transport
-	url       string
+	client *http.Client
+	url    string
 }
 
 func NewV1MetadataReadService(cmr *Cluster) (*V1MetadataReadService, error) {
 	url := cmr.GetAddress()
 	if !strings.Contains(url, SourcePlaceholder) || !strings.Contains(url, UUIDPlaceholder) {
-		return nil, fmt.Errorf("Metadata URL is invalid")
+		return nil, errors.New("Metadata URL is invalid")
+	}
+
+	t := digest.NewTransport(cmr.GetUsername(), cmr.GetPassword())
+	t.Transport = transport
+	c, err := t.Client()
+	if err != nil {
+		return nil, err
 	}
 	return &V1MetadataReadService{
-		transport: digest.NewTransport(cmr.GetUsername(), cmr.GetPassword()),
-		url:       cmr.GetAddress()}, nil
+		client: c,
+		url:    cmr.GetAddress()}, nil
 }
 
 func (c *V1MetadataReadService) ReadByUUID(content Content) ([]byte, error) {
-	var metadata []byte
+	var result []byte
 	url, err := c.buildURL(content)
 	if err != nil {
 		log.Errorf("Error while building metadata URL: %s", err)
-		return metadata, err
+		return result, err
 	}
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		return metadata, err
+		return result, err
 	}
 	req.Header.Add("ClientUserPrincipal", "upp")
 
-	resp, err := c.transport.RoundTrip(req)
+	resp, err := c.client.Do(req)
 	if err != nil {
-		return metadata, err
+		j, _ := json.Marshal(content)
+		log.Errorf("Getting metadata for content=[%s] failed: %s", j, err)
+		return result, err
 	}
+	defer resp.Body.Close()
 
 	//if status is 204 means that there is no metadata for this piece of content
 	if resp.StatusCode == http.StatusNoContent {
-		return metadata, nil
+		return result, nil
 	}
 	if resp.StatusCode != http.StatusOK {
-		return metadata, fmt.Errorf("Received response with status code [%d] from binding service for UUID=[%s]", resp.StatusCode, content.UUID)
+		j, _ := json.Marshal(content)
+		return result, fmt.Errorf("Received response with status code %d from binding service for content=[%s]", resp.StatusCode, j)
 	}
-
-	metadata, err = ioutil.ReadAll(resp.Body)
-	return metadata, err
+	result, err = ioutil.ReadAll(resp.Body)
+	return result, err
 }
 
 func (c *V1MetadataReadService) buildURL(content Content) (string, error) {
-	source, err := content.getSource()
-	if err != nil {
-		return "", err
+	source, ok := content.getSource()
+	if !ok {
+		j, _ := json.Marshal(content)
+		return "", fmt.Errorf("Cannot get source of content=[%s]", j)
 	}
 
 	url := strings.Replace(c.url, SourcePlaceholder, source, -1)

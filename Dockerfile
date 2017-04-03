@@ -1,19 +1,22 @@
-FROM alpine:3.4
+FROM golang:1.8-alpine
 
-ADD . /v1-metadata-publisher/
+RUN mkdir -p "$GOPATH/src"
 
-RUN apk add --update bash \
-  && apk --update add git go ca-certificates \
-  && export GOPATH=/gopath \
-  && REPO_PATH="github.com/Financial-Times/v1-metadata-publisher" \
-  && mkdir -p $GOPATH/src/${REPO_PATH} \
-  && mv v1-metadata-publisher/* $GOPATH/src/${REPO_PATH} \
-  && cd $GOPATH/src/${REPO_PATH} \
-  && go get -t ./... \
-  && go build \
-  && go test ./... \
-  && mv v1-metadata-publisher /v1-metadata-publisher-app \
-  && apk del go git bzr \
-  && rm -rf $GOPATH /var/cache/apk/*
+ADD . "$GOPATH/src/github.com/Financial-Times/v1-metadata-publisher"
 
-CMD [ "/v1-metadata-publisher-app" ]
+WORKDIR "$GOPATH/src/github.com/Financial-Times/v1-metadata-publisher"
+
+RUN apk --no-cache --virtual .build-dependencies add git \
+    && apk --no-cache --upgrade add ca-certificates \
+    && update-ca-certificates --fresh \
+    && apk --no-cache --upgrade add openssh \
+    && cd $GOPATH/src/github.com/Financial-Times/v1-metadata-publisher \
+    && go get ./... \
+    && go build \
+    && go test ./... \
+    && apk del .build-dependencies \
+    && rm -rf $GOPATH/src $GOPATH/pkg /usr/local/go
+
+EXPOSE 8080
+
+CMD ["v1-metadata-publisher"]

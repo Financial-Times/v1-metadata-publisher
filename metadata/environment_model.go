@@ -12,9 +12,11 @@ type Cluster struct {
 
 func GetCluster(address string, credentials string) *Cluster {
 	cluster := Cluster{address: address}
-	auth := strings.Split(credentials, ":")
-	cluster.username = auth[0]
-	cluster.password = auth[1]
+	if credentials != "" {
+		auth := strings.Split(credentials, ":")
+		cluster.username = auth[0]
+		cluster.password = auth[1]
+	}
 	return &cluster
 }
 

@@ -3,7 +3,7 @@ V1-Metadata-Publisher
 
 This is a one off application that publishes V1-Metadata for all the content in UPP. 
 
-This service gets all the content UUIDs from document-store-api, saves them into a temporary file and then reads each UUID, gets the metadata by calling the binding-service and sends the result to the cms-metadata-notifier.
+This service gets all the content UUIDs from document-store, gets the metadata by calling the binding-service and sends the result to the cms-metadata-notifier.
 
 Usage
 ---------
@@ -20,15 +20,12 @@ Usage
 
 __With Docker:__
 ```bash
-docker pull coco/v1-metadata-publisher:latest
+docker pull coco/v1-metadata-publisher:{latest_version}
 
 ##Set environment variables:
 
-## Ger URL for content UUIDs
+## Address of document-store
 export DELIVERY_CLUSTER=
-
-## Delivery cluster credentials as username:password
-export DELIVERY_CLUSTER_CREDENTIALS=
 
 ## Metadata publishing URL
 export PUBLISHING_CLUSTER=
@@ -47,16 +44,20 @@ export SOURCE=
 
 ## number of requests to be sent / second
 export BATCH_SIZE=
-
-docker run -ti \
-    --env DELIVERY_CLUSTER=$DELIVERY_CLUSTER \
-    --env DELIVERY_CLUSTER_CREDENTIALS=$DELIVERY_CLUSTER_CREDENTIALS \ 
-    --env PUBLISHING_CLUSTER=$PUBLISHING_CLUSTER \ 
-    --env PUBLISHING_CLUSTER_CREDENTIALS=$PUBLISHING_CLUSTER_CREDENTIALS \ 
-    --env CMR_ADDRESS=$CMR_ADDRESS \
-    --env CMR_CREDENTIALS=$CMR_CREDENTIALS \ 
-    --env SOURCE=$SOURCE \
-    --env BATCH_SIZE=$BATCH_SIZE  \
-    coco/v1-metadata-publisher:latest
 ```
-
+```bash
+#Run docker image
+docker run \
+    -e "DELIVERY_CLUSTER=$DELIVERY_CLUSTER" \
+    -e "PUBLISHING_CLUSTER=$PUBLISHING_CLUSTER" \
+    -e "PUBLISHING_CLUSTER_CREDENTIALS=$PUBLISHING_CLUSTER_CREDENTIALS" \
+    -e "CMR_ADDRESS=$CMR_ADDRESS" \
+    -e "CMR_CREDENTIALS=$CMR_CREDENTIALS" \
+    -e "SOURCE=$SOURCE" \
+    -e "BATCH_SIZE=$BATCH_SIZE"  \
+    coco/v1-metadata-publisher:{latest_version}
+```
+__NB:__ This app supposes that there is an ssh tunnel between the host where Mongo runs the the local machine:
+```bash
+ssh -L {localhost_private_ip}:27020:localhost:27020 {username}@{mongo_instance_ip}
+``` 

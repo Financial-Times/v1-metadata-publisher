@@ -1,126 +1,128 @@
 package metadata
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
 	"time"
 
 	"sync"
 
-	log "github.com/Sirupsen/logrus"
+	"github.com/gosuri/uilive"
+	"github.com/op/go-logging"
 )
 
-const UUIDFile = "content.json"
+var log = logging.MustGetLogger("v1-metadata-publisher")
 
-type MetadataPublishService interface {
+type PublishService interface {
 	Publish() error
+	SendMetadataJob(contents []Content, errorsCh chan error, doneCh chan bool)
 }
 
 type V1MetadataPublishService struct {
 	cs         ContentService
 	publishing *Cluster
-	mr         MetadataReadService
+	mr         ReadService
 	source     string
 	batchSize  int
+	client     *http.Client
 }
 
-func NewV1MetadataPublishService(contentSerivce ContentService, publishing *Cluster, mr MetadataReadService, source string, batchSize int) *V1MetadataPublishService {
+func NewV1MetadataPublishService(contentService ContentService, publishing *Cluster, mr ReadService, source string, batchSize int) *V1MetadataPublishService {
 	return &V1MetadataPublishService{
-		cs:         contentSerivce,
+		cs:         contentService,
 		publishing: publishing,
 		mr:         mr,
 		source:     source,
 		batchSize:  batchSize,
+		client:     &http.Client{Transport: transport},
 	}
 }
 
 func (mp *V1MetadataPublishService) Publish() error {
-	f, total, err := mp.cs.SaveContent(UUIDFile)
-	if err != nil {
-		return err
-	}
-	defer func () {
-		//remove temporary file 
-		f.Close()
-		os.Remove(UUIDFile)
-	}()
+	contentErr := make(chan error)
+	defer close(contentErr)
+	publishErr := make(chan error)
+	defer close(publishErr)
+	done := make(chan bool)
+	defer close(done)
+	writer := uilive.New()
+	writer.Start()
 
-	errorsCh := make(chan error)
-	doneCh := make(chan bool)
-	metadataBatch := []Content{}
+	contentCh := mp.cs.GetContent(mp.source, contentErr)
+	batch := []Content{}
 	counter := 0
-	scanner := bufio.NewScanner(f)
-	progress := 0.0
-	t := float64(total)
-	for scanner.Scan() {
-		var content Content
-		json.Unmarshal(scanner.Bytes(), &content)
-		cs, err := content.getSource()
-		if err != nil || cs != mp.source {
-			log.Warnf("Cannot publish metadata for content with UUID=[%d]. Skipping...", content.UUID)
-			continue
-		}
+	progress := 0
 
-		if counter < mp.batchSize {
-			metadataBatch = append(metadataBatch, content)
-			counter++
-		} else {
-			log.Infof("Publishing metadata for content %s", metadataBatch)
-			progress = progress + float64(len(metadataBatch))
-			log.Infof("Progress is %.2f", (progress*100)/t)
-			go mp.sendMetadataJob(metadataBatch, errorsCh, doneCh)
-			<-doneCh
-			counter = 0
-			metadataBatch = []Content{}
-			time.Sleep(1 * time.Second)
+	for {
+		select {
+		case err := <-contentErr:
+			if err != nil {
+				return err
+			}
+		case content, ok := <-contentCh:
+			if !ok {
+				if len(batch) > 0 {
+					go mp.SendMetadataJob(batch, publishErr, done)
+					wait(publishErr, done)
+				}
+				fmt.Fprintf(writer, "\nFinished: %d contents published for source %s\n", progress, mp.source)
+				writer.Stop()
+				return nil
+			}
+			if counter < mp.batchSize {
+				batch = append(batch, content)
+				counter++
+			} else {
+				progress = progress + len(batch)
+				fmt.Fprintf(writer, "%d contents published\n", progress)
+
+				go mp.SendMetadataJob(batch, publishErr, done)
+				wait(publishErr, done)
+				counter = 0
+				batch = []Content{}
+
+				if progress%100000 == 0 {
+					time.Sleep(10 * time.Minute)
+				}
+			}
 		}
 	}
-
-	if len(metadataBatch) > 0 {
-		go mp.sendMetadataJob(metadataBatch, errorsCh, doneCh)
-		<-doneCh
-	}
-	return nil
 }
-
-func (mp *V1MetadataPublishService) sendMetadataJob(contents []Content, errorsCh chan error, doneCh chan bool) {
+func (mp *V1MetadataPublishService) SendMetadataJob(contents []Content, errorsCh chan error, doneCh chan bool) {
 	var wg sync.WaitGroup
 	wg.Add(len(contents))
 	rate := time.Second / time.Duration(len(contents))
 	throttle := time.Tick(rate)
 
-	for _, content := range contents {
+	for i, content := range contents {
 		<-throttle
-		go func(content Content) {
+		go func(content Content, i int) {
 			defer wg.Done()
-			metadata, err := mp.mr.ReadByUUID(content)
+			value, err := mp.mr.ReadByUUID(content)
 			if err != nil {
 				errorsCh <- err
 				return
 			}
-			if len(metadata) == 0 {
-				log.Infof("No metadata found for content with UUID=[%s]", content.UUID)
+			if len(value) == 0 {
+				log.Infof("No metadata found for content=[%s]", content)
 				return
 			}
-			err = mp.publishMetadataForUUID(content.UUID, metadata)
+			err = mp.publishMetadataForUUID(content, value)
 			if err != nil {
+				log.Errorf("Metadata publish for content=[%s] failed because: [$s]", content, err)
 				errorsCh <- err
-				return 
+				return
 			}
-		}(content)
+		}(content, i)
 	}
-	go handleErrors(errorsCh)
 	wg.Wait()
 	doneCh <- true
 }
 
-func (mp *V1MetadataPublishService) publishMetadataForUUID(UUID string, metadata []byte) error {
-	client := &http.Client{}
-	body, err := getPayload(UUID, metadata)
+func (mp *V1MetadataPublishService) publishMetadataForUUID(content Content, metadata []byte) error {
+	body, err := getPayload(content.UUID, metadata)
 	if err != nil {
 		return err
 	}
@@ -130,16 +132,18 @@ func (mp *V1MetadataPublishService) publishMetadataForUUID(UUID string, metadata
 		return err
 	}
 
-	resp, err := client.Do(req)
+	resp, err := mp.client.Do(req)
 	if err != nil {
 		return err
 	}
+	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("Publishing of content metadata with UUID=[%s] failed with status code %d", UUID, resp.StatusCode)
+		j, _ := json.Marshal(content)
+		return fmt.Errorf("Publishing of metadata for content=[%s] failed with status code %d", j, resp.StatusCode)
 	}
 
 	tid := resp.Header.Get("X-Request-Id")
-	log.Infof("Metadata published for content with UUID=[%s] having tid=[%s]", UUID, tid)
+	log.Infof("Metadata published for content=[%s] having tid=[%s]", content.UUID, tid)
 	return nil
 }
 
@@ -163,9 +167,14 @@ func getPublishRequest(body []byte, url string, username string, password string
 	return req, nil
 }
 
-func handleErrors(errors chan error) {
-	for e := range errors {
-		checkError(e, "metadata publishing")
+func wait(publishErr chan error, done chan bool) {
+	for {
+		select {
+		case err := <-publishErr:
+			checkError(err, "metadata publishing")
+		case <-done:
+			return
+		}
 	}
 }
 

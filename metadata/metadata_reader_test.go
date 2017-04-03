@@ -18,13 +18,13 @@ var testContent = Content{
 	Identifiers: []Identifier{{Authority: "http://api.ft.com/system/FTCOM-METHODE"}},
 }
 
-func TestReadByUUIDSuccessfull(t *testing.T) {
+func TestReadByUUIDSuccessful(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		metadata, err := getMetadata()
+		m, err := getMetadata()
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 		}
-		w.Write(metadata)
+		w.Write(m)
 
 	}))
 	defer ts.Close()
@@ -67,7 +67,7 @@ func TestReadByUUIDEmptyResponseWhenNoMetadataIsReturned(t *testing.T) {
 	assert.Equal(t, expectedResponse, result, "Actual metadata differs from expected metadata")
 }
 
-func TestReadByUUIDUnsuccessfull(t *testing.T) {
+func TestReadByUUIDUnsuccessful(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))

@@ -1,80 +1,72 @@
 package metadata
 
 import (
-	"bufio"
-	"fmt"
-	"io"
-	"net/http"
-	"os"
+	"net"
+	"strings"
+	"time"
 
-	log "github.com/Sirupsen/logrus"
+	"gopkg.in/mgo.v2"
+	"gopkg.in/mgo.v2/bson"
 )
 
 type ContentService interface {
-	SaveContent(file string) (*os.File, int, error)
+	GetContent(source string, errCh chan error) chan Content
 }
 
 type UPPContentService struct {
-	delivery *Cluster
+	dbName  string
+	session *mgo.Session
 }
 
-func InitContentService(delivery *Cluster) *UPPContentService {
-	return &UPPContentService{delivery: delivery}
-}
-
-func (c *UPPContentService) SaveContent(file string) (*os.File, int, error) {
-	f, err := os.Create(file)
-	if err != nil {
-		return nil, 0, err
-	}
-
-	reader, err := c.readContent()
-	if err != nil {
-		return f, 0, err
-	}
-	total, err := c.writeContent(f, reader)
-	if err != nil {
-		return f, 0, err
-	}
-
-	f.Seek(0, 0)
-	return f, total, nil
-}
-
-func (c *UPPContentService) readContent() (*bufio.Reader, error) {
-	client := &http.Client{}
-	req, err := http.NewRequest("GET", c.delivery.GetAddress(), nil)
+func tcpDialServer(addr *mgo.ServerAddr) (net.Conn, error) {
+	ra, err := net.ResolveTCPAddr("tcp", addr.String())
 	if err != nil {
 		return nil, err
 	}
-	req.SetBasicAuth(c.delivery.GetUsername(), c.delivery.GetPassword())
-	q := req.URL.Query()
-	q.Add("includeSource", "true")
-	req.URL.RawQuery = q.Encode()
-
-	resp, err := client.Do(req)
+	conn, err := net.DialTCP("tcp", nil, ra)
 	if err != nil {
 		return nil, err
 	}
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("Received response with status code %d", resp.StatusCode)
-	}
-
-	return bufio.NewReader(resp.Body), nil
+	conn.SetKeepAlive(true)
+	conn.SetKeepAlivePeriod(30 * time.Second)
+	return conn, nil
 }
 
-func (c *UPPContentService) writeContent(f *os.File, r *bufio.Reader) (int, error) {
-	counter := 0
-	for {
-		line, err := r.ReadBytes('\n')
-		if err != nil {
-			if err == io.EOF {
-				log.Infof("Received %d UUIDs", counter)
-				return counter, nil
+func InitContentService(delivery *Cluster) (*UPPContentService, error) {
+	info := mgo.DialInfo{
+		Timeout:    2 * time.Minute,
+		Addrs:      strings.Split(delivery.address, ","),
+		DialServer: tcpDialServer,
+	}
+
+	session, err := mgo.DialWithInfo(&info)
+	if err != nil {
+		return nil, err
+	}
+	session.SetMode(mgo.Strong, true)
+	session.SetCursorTimeout(0)
+	return &UPPContentService{session: session}, nil
+}
+
+func (c *UPPContentService) GetContent(source string, errCh chan error) chan Content {
+	result := make(chan Content)
+
+	go func() {
+		defer close(result)
+		coll := c.session.DB("upp-store").C("content")
+		iter := coll.Find(bson.M{"mediaType": nil}).Select(bson.M{"uuid": true, "_id": false, "identifiers.authority": true}).Iter()
+
+		var content Content
+		for iter.Next(&content) {
+			cSource, ok := content.getSource()
+			if ok && source == cSource {
+				result <- content
 			}
-			return 0, err
 		}
-		f.Write(line)
-		counter++
-	}
+		if err := iter.Close(); err != nil {
+			errCh <- err
+		}
+	}()
+
+	return result
 }
