@@ -1,0 +1,5 @@
+*.exe
+v1-metadata-publisher.log
+v1-metadata-publisher-error.log
+.idea
+*.iml

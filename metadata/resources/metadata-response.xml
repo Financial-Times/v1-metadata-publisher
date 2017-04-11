@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<cr:contentRef xmlns:b="http://metadata.internal.ft.com/metadata/xsd/metadata_base_v1.0.xsd" xmlns:tm="http://metadata.internal.ft.com/metadata/xsd/metadata_term_v1.0.xsd" xmlns:p="http://metadata.internal.ft.com/metadata/xsd/metadata_party_v1.0.xsd" xmlns:lc="http://metadata.internal.ft.com/metadata/xsd/metadata_lifecycle_v1.0.xsd" xmlns:bnd="http://metadata.internal.ft.com/metadata/xsd/metadata_binding_v1.0.xsd" xmlns:tg="http://metadata.internal.ft.com/metadata/xsd/metadata_tag_v1.0.xsd" xmlns:pr="http://metadata.internal.ft.com/metadata/xsd/metadata_property_v1.0.xsd" xmlns:tx="http://metadata.internal.ft.com/metadata/xsd/metadata_taxonomy_v1.0.xsd" xmlns:sg="http://metadata.internal.ft.com/metadata/xsd/metadata_suggestion_v1.0.xsd" xmlns:cr="http://metadata.internal.ft.com/metadata/xsd/metadata_content_reference_v1.0.xsd" xmlns:cpt="http://metadata.internal.ft.com/metadata/xsd/metadata_concept_v1.0.xsd" xmlns:nt="http://metadata.internal.ft.com/metadata/xsd/metadata_notification_v1.0.xsd" xmlns:s="http://metadata.internal.ft.com/metadata/xsd/metadata_search_v1.0.xsd" xmlns:mcr="http://metadata.internal.ft.com/metadata/xsd/metadata_count_response_v1.0.xsd" cr:created="2017-03-15T13:09:47.000Z" cr:id="3643809">
+    <cr:tags>
+        <tg:tag>
+            <tg:meta b:provenance="INLINE"/>
+            <tg:term tm:status="ACTIVE" tm:externalTermId="CB-0334308" tm:taxonomy="Authors" b:id="Q0ItMDMzNDMwOA==-QXV0aG9ycw==">
+                <tm:canonicalName>Henry Foy</tm:canonicalName>
+            </tg:term>
+            <tg:score tg:frequency="1" tg:relevance="90" tg:confidence="90"/>
+        </tg:tag>
+    </cr:tags>
+    <cr:externalReferences>
+        <bnd:reference b:externalId="4fad74e8-056c-11e7-ace0-1ce02ef0def9" b:externalSource="METHODE"/>
+    </cr:externalReferences>
+</cr:contentRef>
