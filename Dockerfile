@@ -13,7 +13,6 @@ RUN apk --no-cache --virtual .build-dependencies add git \
     && cd $GOPATH/src/github.com/Financial-Times/v1-metadata-publisher \
     && go get ./... \
     && go build \
-    && go test ./... \
     && apk del .build-dependencies \
     && rm -rf $GOPATH/src $GOPATH/pkg /usr/local/go
 

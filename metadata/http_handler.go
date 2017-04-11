@@ -42,14 +42,16 @@ func (h *HttpHandler) Publish(w http.ResponseWriter, r *http.Request) {
 
 	errorCh := make(chan error)
 	doneCh := make(chan bool)
-	h.mp.SendMetadataJob(ids, errorCh, doneCh)
+	go h.mp.SendMetadataJob(ids, errorCh, doneCh)
 	for {
 		select {
 		case err := <-errorCh:
+			log.Error(err)
 			w.Write([]byte(err.Error()))
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		case <-doneCh:
+			log.Infof("Finished importing %d contents", len(ids))
 			return
 		}
 	}

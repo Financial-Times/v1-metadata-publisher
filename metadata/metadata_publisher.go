@@ -83,8 +83,8 @@ func (mp *V1MetadataPublishService) Publish() error {
 				counter = 0
 				batch = []Content{}
 
-				if progress%100000 == 0 {
-					time.Sleep(10 * time.Minute)
+				if progress%50000 == 0 {
+					time.Sleep(5 * time.Minute)
 				}
 			}
 		}
