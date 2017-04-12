@@ -64,6 +64,7 @@ func (mp *V1MetadataPublishService) Publish() error {
 		case content, ok := <-contentCh:
 			if !ok {
 				if len(batch) > 0 {
+					progress = progress + len(batch)
 					go mp.SendMetadataJob(batch, publishErr, done)
 					wait(publishErr, done)
 				}
@@ -106,7 +107,6 @@ func (mp *V1MetadataPublishService) SendMetadataJob(contents []Content, errorsCh
 				return
 			}
 			if len(value) == 0 {
-				log.Infof("No metadata found for content=[%s]", content)
 				return
 			}
 			err = mp.publishMetadataForUUID(content, value)
@@ -135,12 +135,11 @@ func (mp *V1MetadataPublishService) publishMetadataForUUID(content Content, meta
 
 	resp, err := mp.client.Do(req)
 	if err != nil {
-		return err
+		return fmt.Errorf("Publishing of metadata failed: [%s]", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		j, _ := json.Marshal(content)
-		return fmt.Errorf("Publishing of metadata for content=[%s] failed with status code %d", j, resp.StatusCode)
+		return fmt.Errorf("Publishing of metadata failed with status code %d", resp.StatusCode)
 	}
 
 	tid := resp.Header.Get("X-Request-Id")
