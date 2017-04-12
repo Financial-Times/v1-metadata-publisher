@@ -111,7 +111,8 @@ func (mp *V1MetadataPublishService) SendMetadataJob(contents []Content, errorsCh
 			}
 			err = mp.publishMetadataForUUID(content, value)
 			if err != nil {
-				log.Errorf("Metadata publish for content=[%s] failed because: [$s]", content, err)
+				j, _ := json.Marshal(content)
+				log.Errorf("Metadata publish for content=[%s] failed because: [%s]", j, err)
 				errorsCh <- err
 				return
 			}
