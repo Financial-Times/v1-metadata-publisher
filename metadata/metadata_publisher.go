@@ -41,8 +41,6 @@ func NewV1MetadataPublishService(contentService ContentService, publishing *Clus
 }
 
 func (mp *V1MetadataPublishService) Publish() error {
-	contentErr := make(chan error)
-	defer close(contentErr)
 	publishErr := make(chan error)
 	defer close(publishErr)
 	done := make(chan bool)
@@ -50,46 +48,36 @@ func (mp *V1MetadataPublishService) Publish() error {
 	writer := uilive.New()
 	writer.Start()
 
-	contentCh := mp.cs.GetContent(mp.source, contentErr)
+	contentCh := mp.cs.GetContent(mp.source)
 	batch := []Content{}
-	counter := 0
 	progress := 0
 
 	for {
-		select {
-		case err := <-contentErr:
-			if err != nil {
-				return err
-			}
-		case content, ok := <-contentCh:
-			if !ok {
-				if len(batch) > 0 {
-					go mp.SendMetadataJob(batch, publishErr, done)
-					wait(publishErr, done)
-				}
-				fmt.Fprintf(writer, "\nFinished: %d contents published for source %s\n", progress, mp.source)
-				writer.Stop()
-				return nil
-			}
-			if counter < mp.batchSize {
-				batch = append(batch, content)
-				counter++
-			} else {
-				progress = progress + len(batch)
-				fmt.Fprintf(writer, "%d contents published\n", progress)
-
+		content, ok := <-contentCh
+		if !ok {
+			if len(batch) > 0 {
 				go mp.SendMetadataJob(batch, publishErr, done)
 				wait(publishErr, done)
-				counter = 0
-				batch = []Content{}
+			}
+			fmt.Fprintf(writer, "\nFinished: %d contents published for source %s\n", progress, mp.source)
+			writer.Stop()
+			return nil
+		}
+		progress++
+		batch = append(batch, content)
+		if progress%mp.batchSize == 0 {
+			fmt.Fprintf(writer, "%d content items published\n", progress)
+			go mp.SendMetadataJob(batch, publishErr, done)
+			wait(publishErr, done)
+			batch = []Content{}
 
-				if progress%50000 == 0 {
-					time.Sleep(5 * time.Minute)
-				}
+			if progress%50000 == 0 {
+				time.Sleep(5 * time.Minute)
 			}
 		}
 	}
 }
+
 func (mp *V1MetadataPublishService) SendMetadataJob(contents []Content, errorsCh chan error, doneCh chan bool) {
 	var wg sync.WaitGroup
 	wg.Add(len(contents))
@@ -106,12 +94,12 @@ func (mp *V1MetadataPublishService) SendMetadataJob(contents []Content, errorsCh
 				return
 			}
 			if len(value) == 0 {
-				log.Infof("No metadata found for content=[%s]", content)
 				return
 			}
 			err = mp.publishMetadataForUUID(content, value)
 			if err != nil {
-				log.Errorf("Metadata publish for content=[%s] failed because: [$s]", content, err)
+				j, _ := json.Marshal(content)
+				log.Errorf("Metadata publish for content=[%s] failed because: [%s]", j, err)
 				errorsCh <- err
 				return
 			}
@@ -134,12 +122,11 @@ func (mp *V1MetadataPublishService) publishMetadataForUUID(content Content, meta
 
 	resp, err := mp.client.Do(req)
 	if err != nil {
-		return err
+		return fmt.Errorf("Publishing of metadata failed: [%s]", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		j, _ := json.Marshal(content)
-		return fmt.Errorf("Publishing of metadata for content=[%s] failed with status code %d", j, resp.StatusCode)
+		return fmt.Errorf("Publishing of metadata failed with status code %d", resp.StatusCode)
 	}
 
 	tid := resp.Header.Get("X-Request-Id")

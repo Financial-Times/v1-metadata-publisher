@@ -5,12 +5,14 @@ import (
 	"strings"
 	"time"
 
+	"fmt"
+
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 )
 
 type ContentService interface {
-	GetContent(source string, errCh chan error) chan Content
+	GetContent(source string) chan Content
 }
 
 type UPPContentService struct {
@@ -48,7 +50,7 @@ func InitContentService(delivery *Cluster) (*UPPContentService, error) {
 	return &UPPContentService{session: session}, nil
 }
 
-func (c *UPPContentService) GetContent(source string, errCh chan error) chan Content {
+func (c *UPPContentService) GetContent(source string) chan Content {
 	result := make(chan Content)
 
 	go func() {
@@ -57,15 +59,15 @@ func (c *UPPContentService) GetContent(source string, errCh chan error) chan Con
 		iter := coll.Find(bson.M{"mediaType": nil}).Select(bson.M{"uuid": true, "_id": false, "identifiers.authority": true}).Iter()
 
 		var content Content
+		var count int
 		for iter.Next(&content) {
 			cSource, ok := content.getSource()
 			if ok && source == cSource {
+				count++
 				result <- content
 			}
 		}
-		if err := iter.Close(); err != nil {
-			errCh <- err
-		}
+		fmt.Printf("Read %d content items\n", count)
 	}()
 
 	return result

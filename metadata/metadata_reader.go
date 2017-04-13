@@ -59,13 +59,15 @@ func (c *V1MetadataReadService) ReadByUUID(content Content) ([]byte, error) {
 	resp, err := c.client.Do(req)
 	if err != nil {
 		j, _ := json.Marshal(content)
-		log.Errorf("Getting metadata for content=[%s] failed: %s", j, err)
-		return result, err
+		log.Errorf("Getting metadata failed: %s", err)
+		return result, fmt.Errorf("Failed to get metadata for content=[%s]", j)
 	}
 	defer resp.Body.Close()
 
 	//if status is 204 means that there is no metadata for this piece of content
 	if resp.StatusCode == http.StatusNoContent {
+		j, _ := json.Marshal(content)
+		log.Warningf("Received response with status code %d from binding service for content=[%s]", resp.StatusCode, j)
 		return result, nil
 	}
 	if resp.StatusCode != http.StatusOK {
