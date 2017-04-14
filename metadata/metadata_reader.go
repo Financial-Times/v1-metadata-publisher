@@ -32,7 +32,7 @@ func NewV1MetadataReadService(cmr *Cluster) (*V1MetadataReadService, error) {
 	}
 
 	t := digest.NewTransport(cmr.GetUsername(), cmr.GetPassword())
-	t.Transport = transport
+	t.Transport = &(*transport)
 	c, err := t.Client()
 	if err != nil {
 		return nil, err

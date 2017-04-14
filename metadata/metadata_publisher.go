@@ -36,7 +36,7 @@ func NewV1MetadataPublishService(contentService ContentService, publishing *Clus
 		mr:         mr,
 		source:     source,
 		batchSize:  batchSize,
-		client:     &http.Client{Transport: transport},
+		client:     &http.Client{Transport: &(*transport)},
 	}
 }
 

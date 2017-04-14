@@ -2,24 +2,24 @@ package metadata
 
 import (
 	"encoding/json"
+	"net"
 	"net/http"
 	"time"
-	"net"
 )
 
+var transport = &http.Transport{
 
-var transport http.RoundTripper = &http.Transport{
 	Proxy: http.ProxyFromEnvironment,
 	DialContext: (&net.Dialer{
 		Timeout:   30 * time.Second,
 		KeepAlive: 60 * time.Second,
 		DualStack: true,
 	}).DialContext,
-	MaxIdleConns:          100,
-	IdleConnTimeout:       120 * time.Second,
+	MaxIdleConns:          1000,
+	IdleConnTimeout:       60 * time.Second,
 	TLSHandshakeTimeout:   10 * time.Second,
 	ExpectContinueTimeout: 1 * time.Second,
-	MaxIdleConnsPerHost:   40,
+	MaxIdleConnsPerHost:   1000,
 }
 
 type HttpHandler struct {
@@ -27,7 +27,7 @@ type HttpHandler struct {
 }
 
 func NewHttpHandler(mp PublishService) *HttpHandler {
-	return &HttpHandler{mp:mp}
+	return &HttpHandler{mp: mp}
 }
 
 func (h *HttpHandler) Publish(w http.ResponseWriter, r *http.Request) {
@@ -47,9 +47,7 @@ func (h *HttpHandler) Publish(w http.ResponseWriter, r *http.Request) {
 		select {
 		case err := <-errorCh:
 			log.Error(err)
-			w.Write([]byte(err.Error()))
 			w.WriteHeader(http.StatusInternalServerError)
-			return
 		case <-doneCh:
 			log.Infof("Finished importing %d contents", len(ids))
 			return
