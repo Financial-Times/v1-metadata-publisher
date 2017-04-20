@@ -48,6 +48,7 @@ func (mp *V1MetadataPublishService) Publish() error {
 	writer := uilive.New()
 	writer.Start()
 
+	startTime := time.Now()
 	contentCh := mp.cs.GetContent(mp.source)
 	batch := []Content{}
 	progress := 0
@@ -66,7 +67,7 @@ func (mp *V1MetadataPublishService) Publish() error {
 		progress++
 		batch = append(batch, content)
 		if progress%mp.batchSize == 0 {
-			fmt.Fprintf(writer, "%d content items published\n", progress)
+			fmt.Fprintf(writer, "%d content items published in %.0f minutes \n", progress, time.Since(startTime).Minutes())
 			go mp.SendMetadataJob(batch, publishErr, done)
 			wait(publishErr, done)
 			batch = []Content{}
