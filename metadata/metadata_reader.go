@@ -6,9 +6,10 @@ import (
 	"net/http"
 	"strings"
 
+	"encoding/json"
+
 	"github.com/bobziuchkovski/digest"
 	"github.com/pkg/errors"
-	"encoding/json"
 )
 
 const (
@@ -23,9 +24,10 @@ type ReadService interface {
 type V1MetadataReadService struct {
 	client *http.Client
 	url    string
+	source string
 }
 
-func NewV1MetadataReadService(cmr *Cluster) (*V1MetadataReadService, error) {
+func NewV1MetadataReadService(cmr *Cluster, source string) (*V1MetadataReadService, error) {
 	url := cmr.GetAddress()
 	if !strings.Contains(url, SourcePlaceholder) || !strings.Contains(url, UUIDPlaceholder) {
 		return nil, errors.New("Metadata URL is invalid")
@@ -39,7 +41,8 @@ func NewV1MetadataReadService(cmr *Cluster) (*V1MetadataReadService, error) {
 	}
 	return &V1MetadataReadService{
 		client: c,
-		url:    cmr.GetAddress()}, nil
+		url:    cmr.GetAddress(),
+		source: source}, nil
 }
 
 func (c *V1MetadataReadService) ReadByUUID(content Content) ([]byte, error) {
@@ -79,13 +82,13 @@ func (c *V1MetadataReadService) ReadByUUID(content Content) ([]byte, error) {
 }
 
 func (c *V1MetadataReadService) buildURL(content Content) (string, error) {
-	source, ok := content.getSource()
-	if !ok {
-		j, _ := json.Marshal(content)
-		return "", fmt.Errorf("Cannot get source of content=[%s]", j)
-	}
+	// source, ok := content.getSource()
+	// if !ok {
+	// 	j, _ := json.Marshal(content)
+	// 	return "", fmt.Errorf("Cannot get source of content=[%s]", j)
+	// }
 
-	url := strings.Replace(c.url, SourcePlaceholder, source, -1)
+	url := strings.Replace(c.url, SourcePlaceholder, c.source, -1)
 	url = strings.Replace(url, UUIDPlaceholder, content.UUID, -1)
 	return url, nil
 

@@ -3,12 +3,14 @@ package main
 import (
 	"os"
 
-	"github.com/Financial-Times/v1-metadata-publisher/metadata"
-	"github.com/op/go-logging"
-	"github.com/jawher/mow.cli"
-	"github.com/gorilla/mux"
 	"net/http"
 	"strconv"
+
+	"github.com/Financial-Times/v1-metadata-publisher/metadata"
+	"github.com/gorilla/mux"
+	"github.com/jawher/mow.cli"
+	"github.com/op/go-logging"
+	"fmt"
 )
 
 var log = logging.MustGetLogger("v1-metadata-publisher.log")
@@ -69,25 +71,26 @@ func main() {
 	initLogging()
 
 	app.Action = func() {
-		delivery := metadata.GetCluster(*deliveryCluster, "")
+		// delivery := metadata.GetCluster(*deliveryCluster, "")
+		fmt.Print(deliveryCluster)
 		publishing := metadata.GetCluster(*publishingCluster, *publishingClusterCredentials)
 		cmr := metadata.GetCluster(*cmrAddress, *cmrCredentials)
 
-		cmrReader, err := metadata.NewV1MetadataReadService(cmr)
+		cmrReader, err := metadata.NewV1MetadataReadService(cmr, *source)
 		if err != nil {
 			log.Errorf("Cannot start application: %s", err)
 			return
 		}
 
-		contentService, err := metadata.InitContentService(delivery)
-		if err != nil {
-			log.Errorf("Cannot start application: %s", err)
-			return
-		}
-		mp := metadata.NewV1MetadataPublishService(contentService, publishing, cmrReader, *source, *batchSize)
-		mp.Publish()
+		// contentService, err := metadata.InitContentService(delivery)
+		// if err != nil {
+		// 	log.Errorf("Cannot start application: %s", err)
+		// 	return
+		// }
+		mp := metadata.NewV1MetadataPublishService(nil, publishing, cmrReader, *source, *batchSize)
+		// mp.Publish()
 
-		httpHandler := metadata.NewHttpHandler(mp)
+		httpHandler := metadata.NewHttpHandler(mp, *batchSize)
 		listen(httpHandler, 8080)
 	}
 

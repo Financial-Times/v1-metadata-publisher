@@ -3,11 +3,13 @@ FROM golang:1.8-alpine
 RUN mkdir -p "$GOPATH/src"
 
 ADD . "$GOPATH/src/github.com/Financial-Times/v1-metadata-publisher"
+ADD meth.txt "$GOPATH"
 
 WORKDIR "$GOPATH/src/github.com/Financial-Times/v1-metadata-publisher"
 
 RUN apk --no-cache --virtual .build-dependencies add git \
     && apk --no-cache --upgrade add ca-certificates \
+    && apk --no-cache --upgrade add curl \
     && update-ca-certificates --fresh \
     && apk --no-cache --upgrade add openssh \
     && cd $GOPATH/src/github.com/Financial-Times/v1-metadata-publisher \
