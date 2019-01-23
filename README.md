@@ -1,4 +1,4 @@
-V1-Metadata-Publisher
+~V1-Metadata-Publisher~ Decommissioned
 =====================
 
 This is a one off application that publishes V1-Metadata for all the content in UPP. 
